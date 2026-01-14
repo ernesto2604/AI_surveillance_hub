@@ -1,0 +1,58 @@
+#include "WiFiS3.h"
+
+char ssid[] = "MOVISTAR_66C0_EXT";    
+char pass[] = "ycwPg493C2YWNc73742C"; 
+char server[] = "192.168.1.37";      
+
+const int trigPin = 9; 
+const int echoPin = 10;  
+const int distanceThreshold = 20; 
+
+bool objectInRange = false;
+WiFiClient client;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+
+  WiFi.begin(ssid, pass);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+  }
+}
+
+void loop() {
+  long duration;
+  int distance;
+
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  duration = pulseIn(echoPin, HIGH);
+  distance = duration * 0.034 / 2;
+
+  if (distance > 0 && distance < distanceThreshold) {
+    if (!objectInRange) { 
+      sendAlert();
+      objectInRange = true; 
+    }
+  } else {
+    if (objectInRange) {
+      objectInRange = false; 
+    }
+  }
+  delay(500); 
+}
+
+void sendAlert() {
+  if (client.connect(server, 5000)) {
+    client.print("GET /detect HTTP/1.1\r\n");
+    client.print("Host: 192.168.1.37\r\n");
+    client.print("Connection: close\r\n\r\n");
+    client.stop();
+  }
+}

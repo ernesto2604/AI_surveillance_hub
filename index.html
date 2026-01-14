@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Vision - IoT Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Smart Vision System Log</h1>
+        <div class="status"><span class="dot"></span> LIVE MONITORING</div>
+    </header>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Detections</div>
+            <div id="stat-total" class="stat-value">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Delivery Window</div>
+            <div id="stat-peak" class="stat-value small-text">Analyzing patterns...</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Avg. Confidence</div>
+            <div id="stat-avg" class="stat-value">0%</div>
+        </div>
+    </div>
+
+    <div class="visuals-grid">
+        <div class="chart-container">
+            <h3>OBJECT DISTRIBUTION</h3>
+            <div class="canvas-wrapper">
+                <canvas id="objectsPieChart"></canvas>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Object</th>
+                        <th>Accuracy</th>
+                        <th>Time Window</th>
+                    </tr>
+                </thead>
+                <tbody id="data-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    Chart.defaults.color = "#ffffff";
+    let myPieChart = null;
+
+    async function fetchData() {
+        try {
+            const response = await fetch('http://localhost:8000/get_data');
+            const data = await response.json();
+            updateStats(data);
+            updateTable(data);
+            updateChart(data);
+        } catch (error) {
+            console.error("Backend error:", error);
+        }
+    }
+
+    function updateStats(data) {
+        if (data.length === 0) return;
+        document.getElementById('stat-total').innerText = data.length;
+        const avg = data.reduce((acc, curr) => acc + parseFloat(curr.Confidence), 0) / data.length;
+        document.getElementById('stat-avg').innerText = avg.toFixed(1) + "%";
+
+        const hourCounts = {};
+        data.forEach(row => {
+            const h = row.Hour;
+            hourCounts[h] = (hourCounts[h] || 0) + 1;
+        });
+
+        let peakHour = null; let maxCount = 0;
+        for (const hour in hourCounts) {
+            if (hourCounts[hour] > maxCount) { maxCount = hourCounts[hour]; peakHour = hour; }
+        }
+
+        if (peakHour !== null) {
+            const hStart = parseInt(peakHour);
+            document.getElementById('stat-peak').innerText = `Most packages delivered between ${hStart} and ${hStart + 1}`;
+        }
+    }
+
+    function updateTable(data) {
+        const tableBody = document.getElementById('data-table-body');
+        tableBody.innerHTML = '';
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="text-dim">${row.Timestamp}</td>
+                <td><span class="badge">${row.Object.toUpperCase()}</span></td>
+                <td class="text-bold">${row.Confidence}%</td>
+                <td>${row.Hour}:00 - ${parseInt(row.Hour) + 1}:00</td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    }
+
+    function updateChart(data) {
+        if (data.length === 0) return;
+
+        const counts = {};
+        data.forEach(row => {
+            const obj = row.Object.toLowerCase();
+            counts[obj] = (counts[obj] || 0) + 1;
+        });
+
+        const labels = Object.keys(counts).map(s => s.charAt(0).toUpperCase() + s.slice(1));
+        const values = Object.values(counts);
+        const total = values.reduce((a, b) => a + b, 0);
+
+        const ctx = document.getElementById('objectsPieChart').getContext('2d');
+
+        if (myPieChart) {
+            myPieChart.data.labels = labels;
+            myPieChart.data.datasets[0].data = values;
+            myPieChart.update();
+        } else {
+            myPieChart = new Chart(ctx, {
+                type: 'pie',
+                plugins: [ChartDataLabels],
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: ['#fde047', '#f97316', '#38bdf8', '#4ade80'],
+                        borderColor: '#1e293b',
+                        borderWidth: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: '#ffffff', 
+                                padding: 20,
+                                font: { 
+                                    size: 14,
+                                    weight: 'bold' 
+                                }
+                            }
+                        },
+                        datalabels: {
+                            color: '#0f172a', 
+                            font: { weight: 'bold', size: 15 },
+                            formatter: (value) => {
+                                return ((value / total) * 100).toFixed(0) + '%';
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    setInterval(fetchData, 5000);
+    fetchData();
+</script>
+
+</body>
+</html>
