@@ -12,7 +12,7 @@ import requests
 app = Flask(__name__)
 model = YOLO('yolov8n.pt') 
 
-PC_IP = "192.168.1.36" 
+PC_IP = "192.168.1.37" 
 PC_PORT = "8000"
 
 TELEGRAM_TOKEN = "8574425087:AAH21JZ8Bv4DkgKE3jU7FiVipuRwKeJIiH4"
