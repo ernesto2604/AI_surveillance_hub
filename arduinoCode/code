@@ -2,7 +2,7 @@
 
 char ssid[] = "MOVISTAR_66C0_EXT";    
 char pass[] = "ycwPg493C2YWNc73742C"; 
-char server[] = "192.168.1.37";      
+char server[] = "192.168.1.42";      
 
 const int trigPin = 9; 
 const int echoPin = 10;  
@@ -35,8 +35,15 @@ void loop() {
   duration = pulseIn(echoPin, HIGH);
   distance = duration * 0.034 / 2;
 
+  Serial.print("Current Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
   if (distance > 0 && distance < distanceThreshold) {
     if (!objectInRange) { 
+      Serial.println("**** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***");
+      Serial.println(">> TARGET DETECTED: Object within 20cm!");
+      Serial.println(">> M2M ACTION: Sending HTTP GET to Raspberry Pi...");
       sendAlert();
       objectInRange = true; 
     }
@@ -51,8 +58,10 @@ void loop() {
 void sendAlert() {
   if (client.connect(server, 5000)) {
     client.print("GET /detect HTTP/1.1\r\n");
-    client.print("Host: 192.168.1.37\r\n");
+    client.print("Host: 192.168.1.42\r\n");
     client.print("Connection: close\r\n\r\n");
     client.stop();
+    Serial.println("[SUCCESS] M2M Packet delivered to 192.168.1.42:5000");
+    Serial.println("**** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***");
   }
 }
