@@ -96,12 +96,20 @@ def main():
                     start_sec = time.time()
                     while time.time() - start_sec < 1.0:
                         f_count = picam2.capture_array()
+                        height_c, width_c = f_count.shape[:2]
+                        crop_width_c = 800
+                        x_start_c = (width_c - crop_width_c) // 2
+                        f_count = f_count[:, x_start_c:x_start_c + crop_width_c]
                         cv2.putText(f_count, str(i), (250, 300), cv2.FONT_HERSHEY_SIMPLEX, 8, (0, 255, 0), 15)
                         cv2.imshow("Smart Vision Monitor", f_count)
                         cv2.waitKey(1)
                 
                 print("[AI] Processing image...")
                 frame_ia = picam2.capture_array()
+                height_ia, width_ia = frame_ia.shape[:2]
+                crop_width_ia = 800
+                x_start_ia = (width_ia - crop_width_ia) // 2
+                frame_ia = frame_ia[:, x_start_ia:x_start_ia + crop_width_ia]
                 results = model.predict(source=frame_ia, conf=0.5, verbose=False)
                 
                 if results[0].boxes:
