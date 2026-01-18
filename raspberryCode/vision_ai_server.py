@@ -68,11 +68,15 @@ def main():
     global trigger_capture, screen_text
     
     picam2 = Picamera2()
-    config = picam2.create_preview_configuration(main={"format": "RGB888", "size": (640, 480)})
+    config = picam2.create_preview_configuration(
+        main={"format": "RGB888", "size": (1280, 960)},
+        sensor={"output_size": picam2.sensor_resolution}
+    )
     picam2.configure(config)
     picam2.start()
 
-    cv2.namedWindow("Smart Vision Monitor", cv2.WINDOW_AUTOSIZE)
+    cv2.namedWindow("Smart Vision Monitor", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Smart Vision Monitor", 600, 720) 
 
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False), daemon=True).start()
 
@@ -81,6 +85,11 @@ def main():
     try:
         while True:
             frame = picam2.capture_array()
+            
+            height, width = frame.shape[:2]
+            crop_width = 800
+            x_start = (width - crop_width) // 2
+            frame = frame[:, x_start:x_start + crop_width]
             
             if trigger_capture:
                 for i in range(3, 0, -1):
