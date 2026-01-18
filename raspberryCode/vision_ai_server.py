@@ -67,13 +67,8 @@ def trigger():
 def main():
     global trigger_capture, screen_text
     
-    picam2 = Picamera2()
-    config = picam2.create_preview_configuration(
-        main={"format": "RGB888", "size": (1280, 960)},
-        sensor={"output_size": picam2.sensor_resolution}
-    )
-    picam2.configure(config)
-    picam2.start()
+    picam2 = None
+    camera_active = False
 
     cv2.namedWindow("Smart Vision Monitor", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Smart Vision Monitor", 600, 720) 
@@ -81,17 +76,34 @@ def main():
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False), daemon=True).start()
 
     print("--- SYSTEM ONLINE: WAITING FOR ARDUINO ON PORT 5000 ---")
+    print("--- CAMERA OFF: Energy saving mode active ---")
 
     try:
         while True:
-            frame = picam2.capture_array()
+            if trigger_capture and not camera_active:
+                print("[CAMERA] Turning ON - Arduino signal received")
+                try:
+                    if picam2 is not None:
+                        picam2.close()
+                        picam2 = None
+                        time.sleep(0.5)  
+                    
+                    picam2 = Picamera2()
+                    config = picam2.create_preview_configuration(
+                        main={"format": "RGB888", "size": (1280, 960)},
+                        sensor={"output_size": picam2.sensor_resolution}
+                    )
+                    picam2.configure(config)
+                    picam2.start()
+                    camera_active = True
+                except RuntimeError as e:
+                    print(f"[CAMERA] ERROR: Failed to initialize camera: {e}")
+                    print("[CAMERA] Retrying in 1 second...")
+                    time.sleep(1)
+                    trigger_capture = False
+                    continue
             
-            height, width = frame.shape[:2]
-            crop_width = 800
-            x_start = (width - crop_width) // 2
-            frame = frame[:, x_start:x_start + crop_width]
-            
-            if trigger_capture:
+            if camera_active and trigger_capture:
                 for i in range(3, 0, -1):
                     start_sec = time.time()
                     while time.time() - start_sec < 1.0:
@@ -136,15 +148,27 @@ def main():
                     screen_text = "NO OBJECTS DETECTED"
                 
                 trigger_capture = False
-
-            if screen_text:
-                cv2.putText(frame, screen_text, (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                
+                print("[CAMERA] Turning OFF - Energy saving mode activated")
+                if picam2 is not None:
+                    picam2.stop()
+                    picam2.close()
+                    picam2 = None
+                camera_active = False
+                time.sleep(0.5) 
+            elif not trigger_capture and not camera_active:
+                idle_frame = np.zeros((960, 800, 3), dtype=np.uint8)
+                cv2.putText(idle_frame, "WAITING FOR SIGNAL", (100, 400), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (100, 100, 100), 2)
+                cv2.putText(idle_frame, "Camera: OFF (Energy Saving)", (50, 500), cv2.FONT_HERSHEY_SIMPLEX, 1, (100, 100, 100), 2)
+                cv2.imshow("Smart Vision Monitor", idle_frame)
+                cv2.waitKey(100)
             
-            cv2.imshow("Smart Vision Monitor", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'): 
                 break
     finally:
-        picam2.stop()
+        if camera_active and picam2 is not None:
+            picam2.stop()
+            picam2.close()
         cv2.destroyAllWindows()
         if os.path.exists("temp_capture.jpg"): os.remove("temp_capture.jpg")
 
