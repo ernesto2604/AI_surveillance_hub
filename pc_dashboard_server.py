@@ -32,7 +32,7 @@ def recibir_datos():
         return jsonify({"status": "success", "message": "Data stored on PC"}), 200
     
     except Exception as e:
-        print(f"❌ Error in reception: {e}")
+        print(f"Error in reception: {e}")
         return jsonify({"status": "error", "message": str(e)}), 400
 
 @app.route('/get_data', methods=['GET'])
@@ -45,13 +45,13 @@ def enviar_datos():
                 reader = csv.DictReader(f)
                 registros = list(reader)
         except Exception as e:
-            print(f"❌ Error reading CSV: {e}")
+            print(f"Error reading CSV: {e}")
             
     return jsonify(registros[::-1])
 
 if __name__ == "__main__":
     print("========================================")
-    print("🚀 DATA MANAGEMENT BACKEND STARTED")
-    print(f"📍 Local address: http://192.168.1.36:8000")
+    print("DATA MANAGEMENT BACKEND STARTED")
+    print(f"Local address: http://192.168.1.36:8000")
     print("========================================")
     app.run(host='0.0.0.0', port=8000, debug=False)
