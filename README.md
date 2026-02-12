@@ -133,6 +133,12 @@ Expected JSON body:
 
 Returns an array of detection rows from newest to oldest.
 
+## Project Report
+
+For a complete explanation of the project design, implementation decisions, and results, see:
+
+- `docs/AI_surveillance_hub_report.pdf`
+
 ## Security Notes
 
 Current source files contain hardcoded Wi-Fi and Telegram credentials. For production or public sharing:
