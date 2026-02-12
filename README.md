@@ -16,11 +16,13 @@ When an object is detected near the sensor, the system captures an image, runs o
 ## Repository Structure
 
 - `arduinoCode/code`: Arduino sketch that detects proximity and triggers the Pi via HTTP
+- `arduinoCode/secrets.h.example`: Template for local Arduino secrets (Wi-Fi, Pi IP, device key)
 - `raspberryCode/vision_ai_server.py`: Raspberry Pi service for camera capture, YOLO inference, and alerting
 - `pc_dashboard_server.py`: Flask backend that stores detections in `log_detections.csv` and serves dashboard data
 - `index.html`: Frontend dashboard UI
 - `styles.css`: Dashboard styles
 - `log_detections.csv`: Detection log file
+- `.env.example`: Template for runtime configuration and shared API keys
 
 ## System Architecture
 
@@ -73,50 +75,89 @@ git clone https://github.com/ernesto2604/AI_surveillance_hub.git
 cd AI_surveillance_hub
 ```
 
-### 2. Configure Arduino (`arduinoCode/code`)
+### 2. Configure runtime secrets
 
-Update:
-
-- `ssid`
-- `pass`
-- `server` (Raspberry Pi IP)
-
-Flash the sketch to your board.
-
-### 3. Configure Raspberry Pi (`raspberryCode/vision_ai_server.py`)
-
-Update:
-
-- `PC_IP` and `PC_PORT`
-- `TELEGRAM_TOKEN`
-- `TELEGRAM_CHAT_ID`
-
-Install dependencies and run:
+Create a local environment file from the template:
 
 ```bash
-python raspberryCode/vision_ai_server.py
+cp .env.example .env
 ```
 
-### 4. Configure and run backend on PC (`pc_dashboard_server.py`)
+Set at least these required values:
 
-Optionally adjust host/network values in the script, then run:
+- `API_DEVICE_KEY`: secret used by backend to accept requests
+- `DEVICE_KEY`: same value as `API_DEVICE_KEY` (used by Raspberry Pi when posting detections)
+- `CAPTURE_ENDPOINT_KEY`: secret required by Raspberry Pi `/detect` endpoint
+- `PC_IP` and `PC_PORT`: backend address reachable from Raspberry Pi
+- `PI_PORT`: Raspberry Pi detection endpoint port (must match Arduino `PI_SERVER_PORT`)
+
+Optional:
+
+- `TELEGRAM_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `ALLOWED_ORIGINS` for dashboard CORS
+
+### 3. Configure Arduino secrets (`arduinoCode/secrets.h`)
+
+Create a local secrets file from the template:
+
+```bash
+cp arduinoCode/secrets.h.example arduinoCode/secrets.h
+```
+
+Set:
+
+- `WIFI_SSID`
+- `WIFI_PASS`
+- `PI_SERVER_IP`
+- `PI_SERVER_PORT` (must match `PI_PORT` in `.env`)
+- `DEVICE_KEY` (must match `CAPTURE_ENDPOINT_KEY` in `.env`)
+
+Then flash `arduinoCode/code` to your board.
+
+### 4. Install Python dependencies
+
+Recommended (both PC and Raspberry Pi):
+
+```bash
+pip install flask flask-cors requests numpy opencv-python ultralytics
+```
+
+Raspberry Pi also needs `picamera2` installed according to your OS image/package manager.
+
+### 5. Run backend on PC
+
+The backend auto-loads `.env` from the repository root, then start:
 
 ```bash
 python pc_dashboard_server.py
+```
+
+### 6. Run vision service on Raspberry Pi
+
+The vision service also auto-loads `.env` from the repository root (or current folder), then run:
+
+```bash
+python raspberryCode/vision_ai_server.py
 ```
 
 Default API endpoints:
 
 - `POST /new_detection`
 - `GET /get_data`
+- `GET /detect` (requires `X-Device-Key` header)
 
-### 5. Open the dashboard
+### 7. Open the dashboard
 
 Serve or open `index.html` and ensure it can reach the backend URL configured in the frontend (`http://localhost:8000/get_data` by default).
 
 ## API Contract
 
 ### `POST /new_detection`
+
+Security:
+
+- Requires header `X-Device-Key: <API_DEVICE_KEY>`
 
 Expected JSON body:
 
@@ -133,6 +174,12 @@ Expected JSON body:
 
 Returns an array of detection rows from newest to oldest.
 
+### `GET /detect`
+
+Security:
+
+- Requires header `X-Device-Key: <CAPTURE_ENDPOINT_KEY>`
+
 ## Project Report
 
 For a complete explanation of the project design, implementation decisions, and results, see:
@@ -141,11 +188,28 @@ For a complete explanation of the project design, implementation decisions, and 
 
 ## Security Notes
 
-Current source files contain hardcoded Wi-Fi and Telegram credentials. For production or public sharing:
+Security hardening applied in this repository:
 
-- Move secrets to environment variables or local config files excluded by `.gitignore`
-- Rotate exposed tokens/passwords before deploying
-- Restrict network access to trusted LAN hosts
+- Secrets removed from source code and moved to `.env` and `arduinoCode/secrets.h` (both ignored by git)
+- Device-to-device endpoints now require shared key authentication (`X-Device-Key`)
+- CORS is configurable with `ALLOWED_ORIGINS`
+
+Recommended operational actions:
+
+- Rotate any token/password that was previously committed
+- Use long random values for `API_DEVICE_KEY` and `CAPTURE_ENDPOINT_KEY`
+- Restrict services to trusted LAN hosts and firewall unnecessary ports
+
+## Troubleshooting
+
+- `Missing required environment variable: API_DEVICE_KEY`:
+  ensure `.env` is loaded and contains the key.
+- Raspberry Pi `/detect` returns `401 Unauthorized`:
+  `DEVICE_KEY` in `arduinoCode/secrets.h` must match `CAPTURE_ENDPOINT_KEY` on Pi.
+- Backend `/new_detection` returns `401 Unauthorized`:
+  `DEVICE_KEY` on Pi must match `API_DEVICE_KEY` on backend.
+- Dashboard shows no data:
+  verify backend is running on port `8000` and `index.html` points to the correct host.
 
 ## License
 

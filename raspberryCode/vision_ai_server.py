@@ -2,24 +2,66 @@ import cv2
 import numpy as np
 from picamera2 import Picamera2
 from ultralytics import YOLO
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import threading
 import time
 import os
 import datetime
 import requests
+import hmac
+
+
+def _load_dotenv_if_present():
+    candidates = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
+    ]
+    loaded_paths = set()
+    for env_path in candidates:
+        if env_path in loaded_paths or not os.path.isfile(env_path):
+            continue
+        loaded_paths.add(env_path)
+        with open(env_path, mode="r", encoding="utf-8") as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                os.environ.setdefault(key, value)
+
+
+_load_dotenv_if_present()
 
 app = Flask(__name__)
 model = YOLO('yolov8n.pt') 
 
-PC_IP = "192.168.1.37" 
-PC_PORT = "8000"
+PC_IP = os.getenv("PC_IP", "127.0.0.1")
+PC_PORT = os.getenv("PC_PORT", "8000")
+DEVICE_KEY = os.getenv("DEVICE_KEY")
+CAPTURE_ENDPOINT_KEY = os.getenv("CAPTURE_ENDPOINT_KEY")
+PI_PORT = int(os.getenv("PI_PORT", "5000"))
 
-TELEGRAM_TOKEN = "8574425087:AAH21JZ8Bv4DkgKE3jU7FiVipuRwKeJIiH4"
-TELEGRAM_CHAT_ID = "1144391963"
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 trigger_capture = False
 screen_text = ""
+
+
+def _validate_runtime_config():
+    missing = []
+    if not DEVICE_KEY:
+        missing.append("DEVICE_KEY")
+    if not CAPTURE_ENDPOINT_KEY:
+        missing.append("CAPTURE_ENDPOINT_KEY")
+    if missing:
+        raise RuntimeError(
+            "Missing required environment variables: "
+            + ", ".join(missing)
+            + "."
+        )
 
 
 def send_to_pc(obj_name, confidence):
@@ -32,13 +74,17 @@ def send_to_pc(obj_name, confidence):
         'hour': datetime.datetime.now().hour
     }
     try:
-        requests.post(url, json=payload, timeout=3)
+        headers = {"X-Device-Key": DEVICE_KEY}
+        requests.post(url, json=payload, headers=headers, timeout=3)
         print(f"[PC] Data synchronized: {obj_name}")
-    except:
-        print("[PC] Error: PC Server not detected")
+    except requests.RequestException:
+        print("[PC] Error: PC Server not detected or rejected request")
 
 def send_telegram_alert(message, image_path):
     """Sends a photo alert with caption via Telegram."""
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[TELEGRAM] Skipped: TELEGRAM_TOKEN or TELEGRAM_CHAT_ID not configured")
+        return
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
         with open(image_path, 'rb') as photo:
@@ -57,6 +103,9 @@ def send_telegram_alert(message, image_path):
 @app.route('/detect', methods=['GET'])
 def trigger():
     global trigger_capture
+    incoming_key = request.headers.get("X-Device-Key", "")
+    if not hmac.compare_digest(incoming_key, CAPTURE_ENDPOINT_KEY):
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
     if not trigger_capture:
         print("\n[M2M] Package detection signal received from Arduino.")
         trigger_capture = True
@@ -73,9 +122,17 @@ def main():
     cv2.namedWindow("Smart Vision Monitor", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Smart Vision Monitor", 600, 720) 
 
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False), daemon=True).start()
+    threading.Thread(
+        target=lambda: app.run(
+            host='0.0.0.0',
+            port=PI_PORT,
+            debug=False,
+            use_reloader=False
+        ),
+        daemon=True
+    ).start()
 
-    print("--- SYSTEM ONLINE: WAITING FOR ARDUINO ON PORT 5000 ---")
+    print(f"--- SYSTEM ONLINE: WAITING FOR ARDUINO ON PORT {PI_PORT} ---")
     print("--- CAMERA OFF: Energy saving mode active ---")
 
     try:
@@ -173,4 +230,5 @@ def main():
         if os.path.exists("temp_capture.jpg"): os.remove("temp_capture.jpg")
 
 if __name__ == "__main__":
+    _validate_runtime_config()
     main()

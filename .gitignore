@@ -14,7 +14,9 @@ __pycache__/
 # Local secrets and environment files
 .env
 .env.*
+!.env.example
 *.local
+arduinoCode/secrets.h
 
 # OS and editor noise
 .DS_Store

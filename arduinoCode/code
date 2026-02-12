@@ -1,8 +1,11 @@
 #include "WiFiS3.h"
+#include "secrets.h"
 
-char ssid[] = "MOVISTAR_66C0_EXT";    
-char pass[] = "ycwPg493C2YWNc73742C"; 
-char server[] = "192.168.1.42";      
+const char* ssid = WIFI_SSID;
+const char* pass = WIFI_PASS;
+const char* server = PI_SERVER_IP;
+const char* deviceKey = DEVICE_KEY;
+const int piPort = PI_SERVER_PORT;
 
 const int trigPin = 9; 
 const int echoPin = 10;  
@@ -56,12 +59,20 @@ void loop() {
 }
 
 void sendAlert() {
-  if (client.connect(server, 5000)) {
+  if (client.connect(server, piPort)) {
     client.print("GET /detect HTTP/1.1\r\n");
-    client.print("Host: 192.168.1.42\r\n");
+    client.print("Host: ");
+    client.print(server);
+    client.print("\r\n");
+    client.print("X-Device-Key: ");
+    client.print(deviceKey);
+    client.print("\r\n");
     client.print("Connection: close\r\n\r\n");
     client.stop();
-    Serial.println("[SUCCESS] M2M Packet delivered to 192.168.1.42:5000");
+    Serial.print("[SUCCESS] M2M Packet delivered to ");
+    Serial.print(server);
+    Serial.print(":");
+    Serial.println(piPort);
     Serial.println("**** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***");
   }
 }
